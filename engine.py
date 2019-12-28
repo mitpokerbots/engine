@@ -140,10 +140,9 @@ class Player():
     Handles subprocess and socket interactions with one player's pokerbot.
     '''
 
-    def __init__(self, name, path, port):
+    def __init__(self, name, path):
         self.name = name
         self.path = path
-        self.port = port
         self.game_clock = STARTING_GAME_CLOCK
         self.bankroll = 0
         self.commands = None
@@ -188,30 +187,28 @@ class Player():
         '''
         if self.commands is not None and len(self.commands['run']) > 0:
             try:
-                proc = subprocess.Popen(self.commands['run'] + [str(self.port)],
-                                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                        cwd=self.path)
-                self.bot_subprocess = proc
-            except (TypeError, ValueError):
-                print(self.name, 'run command misformatted')
-            except OSError:
-                print(self.name, 'run failed - check "run" in commands.json')
-            try:
                 server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 with server_socket:
-                    server_socket.bind(('', self.port))
+                    server_socket.bind(('', 0))
                     server_socket.settimeout(CONNECT_TIMEOUT)
+                    port = server_socket.getsockname()[1]
+                    proc = subprocess.Popen(self.commands['run'] + [str(port)],
+                                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                            cwd=self.path)
+                    self.bot_subprocess = proc
                     server_socket.listen()
                     client_socket, _ = server_socket.accept()
                     with client_socket:
                         client_socket.settimeout(CONNECT_TIMEOUT)
                         socketfile = client_socket.makefile('rw')
-                self.socketfile = socketfile
-                print(self.name, 'connected successfully')
+                        self.socketfile = socketfile
+                        print(self.name, 'connected successfully')
+            except (TypeError, ValueError):
+                print(self.name, 'run command misformatted')
+            except OSError:
+                print(self.name, 'run failed - check "run" in commands.json')
             except socket.timeout:
                 print('Timed out waiting for', self.name, 'to connect')
-            except OSError:
-                print(self.name, 'connect failed - check PLAYER_PORT')
 
     def stop(self):
         '''
@@ -381,8 +378,8 @@ class Game():
         print()
         print('Starting the Pokerbots engine...')
         players = [
-            Player(PLAYER_1_NAME, PLAYER_1_PATH, PLAYER_1_PORT),
-            Player(PLAYER_2_NAME, PLAYER_2_PATH, PLAYER_2_PORT)
+            Player(PLAYER_1_NAME, PLAYER_1_PATH),
+            Player(PLAYER_2_NAME, PLAYER_2_PATH)
         ]
         for player in players:
             player.build()
