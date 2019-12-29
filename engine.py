@@ -23,7 +23,7 @@ TerminalState = namedtuple('TerminalState', ['deltas', 'previous_state'])
 
 STREET_NAMES = ['Flop', 'Turn', 'River']
 DECODE = {'F': FoldAction, 'C': CallAction, 'K': CheckAction, 'R': RaiseAction}
-CCARDS = lambda code, cards: code + ','.join(map(str, cards))
+CCARDS = lambda cards: ','.join(map(str, cards))
 PCARDS = lambda cards: '[{}]'.format(' '.join(map(str, cards)))
 PVALUE = lambda name, value: ', {} ({})'.format(name, value)
 STATUS = lambda players: ''.join([PVALUE(p.name, p.bankroll) for p in players])
@@ -298,14 +298,14 @@ class Game():
             self.log.append('{} posts the blind of {}'.format(players[1].name, BIG_BLIND))
             self.log.append('{} dealt {}'.format(players[0].name, PCARDS(round_state.hands[0])))
             self.log.append('{} dealt {}'.format(players[1].name, PCARDS(round_state.hands[1])))
-            self.player_messages[0] = ['T0.', 'P0', CCARDS('H', round_state.hands[0])]
-            self.player_messages[1] = ['T0.', 'P1', CCARDS('H', round_state.hands[1])]
+            self.player_messages[0] = ['T0.', 'P0', 'H' + CCARDS(round_state.hands[0])]
+            self.player_messages[1] = ['T0.', 'P1', 'H' + CCARDS(round_state.hands[1])]
         elif round_state.street > 0 and round_state.button == 1:
             board = round_state.deck.peek(round_state.street)
             self.log.append(STREET_NAMES[round_state.street - 3] + ' ' + PCARDS(board) +
                             PVALUE(players[0].name, STARTING_STACK-round_state.stacks[0]) +
                             PVALUE(players[1].name, STARTING_STACK-round_state.stacks[1]))
-            compressed_board = CCARDS('B', board)
+            compressed_board = 'B' + CCARDS(board)
             self.player_messages[0].append(compressed_board)
             self.player_messages[1].append(compressed_board)
 
@@ -337,8 +337,8 @@ class Game():
         if FoldAction not in previous_state.legal_actions():
             self.log.append('{} shows {}'.format(players[0].name, PCARDS(previous_state.hands[0])))
             self.log.append('{} shows {}'.format(players[1].name, PCARDS(previous_state.hands[1])))
-            self.player_messages[0].append(CCARDS('O', previous_state.hands[1]))
-            self.player_messages[1].append(CCARDS('O', previous_state.hands[0]))
+            self.player_messages[0].append('O' + CCARDS(previous_state.hands[1]))
+            self.player_messages[1].append('O' + CCARDS(previous_state.hands[0]))
         self.log.append('{} awarded {}'.format(players[0].name, round_state.deltas[0]))
         self.log.append('{} awarded {}'.format(players[1].name, round_state.deltas[1]))
         self.player_messages[0].append('D' + str(round_state.deltas[0]))
