@@ -76,7 +76,7 @@ public class RoundState extends State {
         int active = this.button % 2;
         int continueCost = this.pips.get(1-active) - this.pips.get(active);
         int maxContribution = Math.min(this.stacks.get(active), this.stacks.get(1-active) + continueCost);
-        int minContribution = Math.min(maxContribution, this.pips.get(1-active) + Math.max(continueCost, State.BIG_BLIND));
+        int minContribution = Math.min(maxContribution, continueCost + Math.max(continueCost, State.BIG_BLIND));
         return Arrays.asList(this.pips.get(active) + minContribution, this.pips.get(active) + maxContribution);
     }
 
