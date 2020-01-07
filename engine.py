@@ -3,6 +3,8 @@
 DO NOT REMOVE, RENAME, OR EDIT THIS FILE
 '''
 from collections import namedtuple
+from threading import Thread
+from queue import Queue
 import time
 import json
 import subprocess
@@ -148,7 +150,7 @@ class Player():
         self.commands = None
         self.bot_subprocess = None
         self.socketfile = None
-        self.bytes_log = []
+        self.bytes_queue = Queue()
 
     def build(self):
         '''
@@ -172,10 +174,10 @@ class Player():
                 proc = subprocess.run(self.commands['build'],
                                       stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                       cwd=self.path, timeout=BUILD_TIMEOUT, check=False)
-                self.bytes_log.append(proc.stdout)
+                self.bytes_queue.put(proc.stdout)
             except subprocess.TimeoutExpired as timeout_expired:
                 print('Timed out waiting for', self.name, 'to build')
-                self.bytes_log.append(timeout_expired.stdout)
+                self.bytes_queue.put(timeout_expired.stdout)
             except (TypeError, ValueError):
                 print(self.name, 'build command misformatted')
             except OSError:
@@ -196,12 +198,22 @@ class Player():
                                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                             cwd=self.path)
                     self.bot_subprocess = proc
+                    # function for bot listening
+                    def enqueue_output(out, queue):
+                        try:
+                            for line in out:
+                                queue.put(line)
+                        except ValueError:
+                            pass
+                    # start a separate bot listening thread which dies with the program
+                    Thread(target=enqueue_output, args=(proc.stdout, self.bytes_queue), daemon=True).start()
+                    # block until we timeout or the player connects
                     server_socket.listen()
                     client_socket, _ = server_socket.accept()
                     with client_socket:
                         client_socket.settimeout(CONNECT_TIMEOUT)
-                        socketfile = client_socket.makefile('rw')
-                        self.socketfile = socketfile
+                        sock = client_socket.makefile('rw')
+                        self.socketfile = sock
                         print(self.name, 'connected successfully')
             except (TypeError, ValueError):
                 print(self.name, 'run command misformatted')
@@ -224,16 +236,19 @@ class Player():
                 print('Could not close socket connection with', self.name)
         if self.bot_subprocess is not None:
             try:
-                outs, _ = self.bot_subprocess.communicate(timeout=QUIT_TIMEOUT)
-                self.bytes_log.append(outs)
+                outs, _ = self.bot_subprocess.communicate(timeout=CONNECT_TIMEOUT)
+                self.bytes_queue.put(outs)
             except subprocess.TimeoutExpired:
                 print('Timed out waiting for', self.name, 'to quit')
                 self.bot_subprocess.kill()
                 outs, _ = self.bot_subprocess.communicate()
-                self.bytes_log.append(outs)
+                self.bytes_queue.put(outs)
         with open(self.name + '.txt', 'wb') as log_file:
-            for output in self.bytes_log:
-                log_file.write(output)
+            bytes_written = 0
+            for output in self.bytes_queue.queue:
+                bytes_written += log_file.write(output)
+                if bytes_written >= PLAYER_LOG_SIZE_LIMIT:
+                    break
 
     def query(self, round_state, player_message, game_log):
         '''
