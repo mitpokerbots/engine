@@ -54,7 +54,7 @@ void Player::handle_round_over(GameState* game_state, TerminalState* terminal_st
 Action Player::get_action(GameState* game_state, RoundState* round_state, int active)
 {
     int legal_actions = round_state->legal_actions();  // mask representing the actions you are allowed to take
-    //int street = round_state->street;  // 0, 3, 4, or 5 representing pre-flop, flop, river, or turn respectively
+    //int street = round_state->street;  // 0, 3, 4, or 5 representing pre-flop, flop, turn, or river respectively
     //std::array<std::string, 2> my_cards = round_state->hands[active];  // your cards
     //std::array<std::string, 5> board_cards = round_state->deck;  // the board cards
     //int my_pip = round_state->pips[active];  // the number of chips you have contributed to the pot this round of betting

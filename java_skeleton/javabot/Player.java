@@ -67,7 +67,7 @@ public class Player implements Bot {
      */
     public Action getAction(GameState gameState, RoundState roundState, int active) {
         Set<ActionType> legalActions = roundState.legalActions();  // the actions you are allowed to take
-        //int street = roundState.street;  // 0, 3, 4, or 5 representing pre-flop, flop, river, or turn respectively
+        //int street = roundState.street;  // 0, 3, 4, or 5 representing pre-flop, flop, turn, or river respectively
         //List<String> myCards = roundState.hands.get(active);  // your cards
         //List<String> boardCards = roundState.deck;  // the board cards
         //int myPip = roundState.pips.get(active);  // the number of chips you have contributed to the pot this round of betting
