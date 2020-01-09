@@ -193,6 +193,7 @@ class Player():
                 with server_socket:
                     server_socket.bind(('', 0))
                     server_socket.settimeout(CONNECT_TIMEOUT)
+                    server_socket.listen()
                     port = server_socket.getsockname()[1]
                     proc = subprocess.Popen(self.commands['run'] + [str(port)],
                                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -208,7 +209,6 @@ class Player():
                     # start a separate bot listening thread which dies with the program
                     Thread(target=enqueue_output, args=(proc.stdout, self.bytes_queue), daemon=True).start()
                     # block until we timeout or the player connects
-                    server_socket.listen()
                     client_socket, _ = server_socket.accept()
                     with client_socket:
                         client_socket.settimeout(CONNECT_TIMEOUT)
