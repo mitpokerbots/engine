@@ -285,7 +285,7 @@ class Player():
                 game_log.append(error_message)
                 print(error_message)
                 self.game_clock = 0.
-            except BrokenPipeError:
+            except OSError:
                 error_message = self.name + ' disconnected'
                 game_log.append(error_message)
                 print(error_message)
