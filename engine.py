@@ -176,8 +176,10 @@ class Player():
                                       cwd=self.path, timeout=BUILD_TIMEOUT, check=False)
                 self.bytes_queue.put(proc.stdout)
             except subprocess.TimeoutExpired as timeout_expired:
-                print('Timed out waiting for', self.name, 'to build')
+                error_message = 'Timed out waiting for ' + self.name + ' to build'
+                print(error_message)
                 self.bytes_queue.put(timeout_expired.stdout)
+                self.bytes_queue.put(error_message.encode())
             except (TypeError, ValueError):
                 print(self.name, 'build command misformatted')
             except OSError:
