@@ -15,10 +15,10 @@ Runner::Runner(Bot* pokerbot, tcp::iostream* stream)
 vector<string> Runner::receive()
 {
     string line;
-    getline(*(this->stream), line);
-    trim(line);
+    std::getline(*(this->stream), line);
+    boost::algorithm::trim(line);
     vector<string> packet;
-    split(packet, line, is_any_of(" "));
+    boost::split(packet, line, boost::is_any_of(" "));
     return packet;
 }
 
@@ -47,7 +47,7 @@ void Runner::send(Action action)
         }
         default:  // RAISE_ACTION_TYPE
         {
-            code = "R" + lexical_cast<string>(action.amount);
+            code = "R" + std::to_string(action.amount);
             break;
         }
     }
@@ -74,19 +74,19 @@ void Runner::run()
                 case 'T':
                 {
                     GameState* freed_game_state = game_state;
-                    game_state = new GameState(game_state->bankroll, lexical_cast<float>(leftover), game_state->round_num);
+                    game_state = new GameState(game_state->bankroll, std::stof(leftover), game_state->round_num);
                     delete freed_game_state;
                     break;
                 }
                 case 'P':
                 {
-                    active = lexical_cast<int>(leftover);
+                    active = std::stoi(leftover);
                     break;
                 }
                 case 'H':
                 {
                     vector<string> cards;
-                    split(cards, leftover, is_any_of(","));
+                    boost::split(cards, leftover, boost::is_any_of(","));
                     array< array<string, 2>, 2> hands = { "" };
                     hands[active] = (array<string, 2>) { cards[0], cards[1] };
                     array<string, 5> deck = { "" };
@@ -117,13 +117,13 @@ void Runner::run()
                 }
                 case 'R':
                 {
-                    round_state = ((RoundState*) round_state)->proceed(RaiseAction(lexical_cast<int>(leftover)));
+                    round_state = ((RoundState*) round_state)->proceed(RaiseAction(std::stoi(leftover)));
                     break;
                 }
                 case 'B':
                 {
                     vector<string> cards;
-                    split(cards, leftover, is_any_of(","));
+                    boost::split(cards, leftover, boost::is_any_of(","));
                     array<string, 5> revised_deck = { "" };
                     for (unsigned int i = 0; i < cards.size(); i++)
                     {
@@ -139,7 +139,7 @@ void Runner::run()
                 {
                     // backtrack
                     vector<string> cards;
-                    split(cards, leftover, is_any_of(","));
+                    boost::split(cards, leftover, boost::is_any_of(","));
                     TerminalState* freed_terminal_state = (TerminalState*) round_state;
                     round_state = freed_terminal_state->previous_state;
                     delete freed_terminal_state;
@@ -155,7 +155,7 @@ void Runner::run()
                 }
                 case 'D':
                 {
-                    int delta = lexical_cast<int>(leftover);
+                    int delta = std::stoi(leftover);
                     array<int, 2> deltas = { -1 * delta, -1 * delta };
                     deltas[active] = delta;
                     TerminalState* freed_terminal_state = (TerminalState*) round_state;
@@ -209,23 +209,33 @@ void Runner::run()
  */
 vector<string> parse_args(int argc, char* argv[])
 {
-    namespace opt = boost::program_options;
     string host = "localhost";
     int port;
 
-    opt::options_description desc("Allowed options");
-    desc.add_options()
-        ("host,h", opt::value<string>(&host), "HOST")
-        ("port", opt::value<int>(&port)->required(), "PORT")
-    ;
+    bool host_flag = false;
+    for (int i = 1; i < argc; i++)
+    {
+        string arg(argv[i]);
+        if ((arg == "-h") | (arg == "--host"))
+        {
+            host_flag = true;
+        }
+        else if (arg == "--port")
+        {
+            // nothing to do
+        }
+        else if (host_flag)
+        {
+            host = arg;
+            host_flag = false;
+        }
+        else
+        {
+            port = std::stoi(arg);
+        }
+    }
 
-    opt::positional_options_description p;
-    p.add("port", 1);
-
-    opt::variables_map vm;
-    opt::store(opt::command_line_parser(argc, argv).options(desc).positional(p).run(), vm);
-    opt::notify(vm);
-    return (vector<string>) { host, lexical_cast<string>(port) };
+    return (vector<string>) { host, std::to_string(port) };
 }
 
 /**
@@ -242,7 +252,7 @@ void run_bot(Bot* pokerbot, vector<string> args)
     tcp::no_delay option(true);
     stream.rdbuf()->set_option(option);
     if (!stream) {
-        cout << "Could not connect to " << host << ":" << port << "\n";
+        std::cout << "Could not connect to " << host << ":" << port << "\n";
         return;
     }
     Runner runner(pokerbot, &stream);

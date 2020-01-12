@@ -5,23 +5,15 @@
 #include <vector>
 #include <array>
 #include <string>
-#include <boost/lexical_cast.hpp>
 #include <boost/algorithm/string.hpp>
-#include <boost/program_options.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include "actions.hpp"
 #include "states.hpp"
 #include "bot.hpp"
 
-using std::getline;
 using std::vector;
 using std::array;
 using std::string;
-using std::cout;
-using boost::lexical_cast;
-using boost::algorithm::trim;
-using boost::split;
-using boost::is_any_of;
 using boost::asio::ip::tcp;
 
 

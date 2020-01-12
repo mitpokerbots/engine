@@ -3,7 +3,7 @@ HEADERS = player.hpp skeleton/bot.hpp skeleton/runner.hpp skeleton/states.hpp sk
 
 CXX = g++
 CXXFLAGS = -Wall -std=c++11
-LDLIBS = -lboost_system -lboost_program_options -lpthread
+LDLIBS = -lboost_system -lpthread
 
 cppbot: $(SOURCES) $(HEADERS)
 	$(CXX) $(CXXFLAGS) -o cppbot $(SOURCES) $(LDLIBS)

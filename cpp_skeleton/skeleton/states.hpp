@@ -7,11 +7,9 @@
 
 using std::array;
 using std::string;
-using std::max;
-using std::min;
 
 const int NUM_ROUNDS     = 1000;
-const int STARTING_STACK = 400;
+const int STARTING_STACK = 200;
 const int BIG_BLIND      = 2;
 const int SMALL_BLIND    = 1;
 

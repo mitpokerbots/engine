@@ -45,8 +45,8 @@ array<int, 2> RoundState::raise_bounds()
 {
     int active = this->button % 2;
     int continue_cost = this->pips[1-active] - this->pips[active];
-    int max_contribution = min(this->stacks[active], this->stacks[1-active] + continue_cost);
-    int min_contribution = min(max_contribution, continue_cost + max(continue_cost, BIG_BLIND));
+    int max_contribution = std::min(this->stacks[active], this->stacks[1-active] + continue_cost);
+    int min_contribution = std::min(max_contribution, continue_cost + std::max(continue_cost, BIG_BLIND));
     return (array<int, 2>) { this->pips[active] + min_contribution, this->pips[active] + max_contribution };
 }
 
