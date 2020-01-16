@@ -248,9 +248,12 @@ class Player():
         with open(self.name + '.txt', 'wb') as log_file:
             bytes_written = 0
             for output in self.bytes_queue.queue:
-                bytes_written += log_file.write(output)
-                if bytes_written >= PLAYER_LOG_SIZE_LIMIT:
-                    break
+                try:
+                    bytes_written += log_file.write(output)
+                    if bytes_written >= PLAYER_LOG_SIZE_LIMIT:
+                        break
+                except TypeError:
+                    pass
 
     def query(self, round_state, player_message, game_log):
         '''
