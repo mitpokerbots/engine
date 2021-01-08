@@ -281,7 +281,9 @@ class Player():
                         amount = int(clause[1:])
                         min_raise, max_raise = round_state.raise_bounds()
                         raise_delta = amount - round_state.pips[active]
-                        min_raise = 1 if round_state.stacks[active] - raise_delta == 0 else min_raise
+                        if round_state.stacks[active] - raise_delta == 0: # if bot going all-in
+                            continue_cost = round_state.pips[1-active] - round_state.pips[active]
+                            min_raise = round_state.pips[active] + continue_cost + 1
                         if min_raise <= amount <= max_raise:
                             return action(amount)
                     else:
