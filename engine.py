@@ -255,7 +255,7 @@ class Player():
                 except TypeError:
                     pass
 
-    def query(self, round_state, player_message, game_log):
+    def query(self, round_state, player_message, game_log, active):
         '''
         Requests one action from the pokerbot over the socket connection.
         At the end of the round, we request a CheckAction from the pokerbot.
@@ -280,6 +280,8 @@ class Player():
                     if clause[0] == 'R':
                         amount = int(clause[1:])
                         min_raise, max_raise = round_state.raise_bounds()
+                        raise_delta = amount - round_state.pips[active]
+                        min_raise = 1 if round_state.stacks[active] - raise_delta == 0 else min_raise
                         if min_raise <= amount <= max_raise:
                             return action(amount)
                     else:
@@ -378,13 +380,13 @@ class Game():
             self.log_round_state(players, round_state)
             active = round_state.button % 2
             player = players[active]
-            action = player.query(round_state, self.player_messages[active], self.log)
+            action = player.query(round_state, self.player_messages[active], self.log, active)
             bet_override = (round_state.pips == [0, 0])
             self.log_action(player.name, action, bet_override)
             round_state = round_state.proceed(action)
         self.log_terminal_state(players, round_state)
         for player, player_message, delta in zip(players, self.player_messages, round_state.deltas):
-            player.query(round_state, player_message, self.log)
+            player.query(round_state, player_message, self.log, None)
             player.bankroll += delta
 
     def run(self):
