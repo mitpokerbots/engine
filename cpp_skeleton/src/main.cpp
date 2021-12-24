@@ -6,28 +6,14 @@
 using namespace pokerbots::skeleton;
 
 struct Bot {
-  void handleNewRound(GameInfoPtr gameState, RoundStatePtr roundState,
-                      int active) {}
-  void handleRoundOver(GameInfoPtr gameState, TerminalStatePtr terminalState,
-                       int active) {}
-  std::vector<Action> getActions(GameInfoPtr gameState,
-                                 RoundStatePtr roundState, int active) {
+  void handleNewRound(GameInfoPtr gameState, RoundStatePtr roundState, int active) {}
+  void handleRoundOver(GameInfoPtr gameState, TerminalStatePtr terminalState, int active) {}
+  std::vector<Action> getActions(GameInfoPtr gameState, RoundStatePtr roundState, int active) {
     auto legalActions = roundState->legalActions();
-    auto myCards = roundState->hands[active];
-    std::vector<Action> myActions;
-    for (int i = 0; i < NUM_BOARDS; ++i) {
-      if (legalActions[i].find(Action::Type::ASSIGN) != legalActions[i].end()) {
-        myActions.emplace_back(
-            Action::Type::ASSIGN,
-            std::array<Card, 2>{myCards[2 * i], myCards[2 * i + 1]});
-      } else if (legalActions[i].find(Action::Type::CHECK) !=
-                 legalActions[i].end()) {
-        myActions.emplace_back(Action::Type::CHECK);
-      } else {
-        myActions.emplace_back(Action::Type::CALL);
-      }
+    if (legalActions.find(Action::Type::CHECK) != legalActions.end()) {
+      return Action::Type::CHECK;
     }
-    return myActions;
+    return Action::Type::CALL;
   }
 };
 
