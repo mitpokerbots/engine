@@ -10,28 +10,23 @@
 
 namespace pokerbots::skeleton {
 
-StatePtr BoardState::showdown() const {
-  return std::make_shared<TerminalState>(Deltas{}, getShared());
+StatePtr RoundState::showdown() const {
+  return std::make_shared<TerminalState>(std::array<int, 2>{0, 0}, getShared());
 }
 
-std::unordered_set<Action::Type>
-BoardState::legalActions(int button, const std::array<int, 2> &stacks) const {
+std::unordered_set<Action::Type> RoundState::legalActions() const {
   auto active = getActive(button);
-
-  if (isEmpty(hands[active]))
-    return {Action::Type::ASSIGN};
-  else if (settled)
-    return {Action::Type::CHECK};
-
-  auto continueCost = pips[1 - active] - pips[active];
+  auto continueCost = pips[1-active] - pips[active];
   if (continueCost == 0) {
+    // we can only raise the stakes if both players can afford it
     auto betsForbidden = stacks[0] == 0 || stacks[1] == 0;
     return betsForbidden ? std::unordered_set<Action::Type>{Action::Type::CHECK}
                          : std::unordered_set<Action::Type>{
                                Action::Type::CHECK, Action::Type::RAISE};
   }
-
-  auto raisesForbidden = continueCost == stacks[0] || continueCost == stacks[1];
+  // continueCost > 0
+  // similarly, re-raising is only allowed if both players can afford it
+  auto raisesForbidden = continueCost == stacks[active] || stacks[1-active] == 0;
   return raisesForbidden
              ? std::unordered_set<Action::Type>{Action::Type::FOLD,
                                                 Action::Type::CALL}
@@ -39,74 +34,66 @@ BoardState::legalActions(int button, const std::array<int, 2> &stacks) const {
                    Action::Type::FOLD, Action::Type::CALL, Action::Type::RAISE};
 }
 
-RaiseBounds BoardState::raiseBounds(int button,
-                                    const std::array<int, 2> &stacks) const {
+std::array<int, 2> RoundState::raiseBounds() const {
   auto active = getActive(button);
-
-  auto continueCost = pips[1 - active] - pips[active];
-  auto maxContribution =
-      std::min(stacks[active], stacks[1 - active] + continueCost);
-  auto minContribution = std::min(
-      maxContribution, continueCost + std::max(continueCost, BIG_BLIND));
+  auto continueCost = pips[1-active] - pips[active];
+  auto maxContribution = std::min(stacks[active], stacks[1-active] + continueCost);
+  auto minContribution = std::min(maxContribution, continueCost + std::max(continueCost, BIG_BLIND));
   return {pips[active] + minContribution, pips[active] + maxContribution};
 }
 
-StatePtr BoardState::proceed(Action action, int button, int street) const {
+StatePtr RoundState::proceedStreet() const {
+  if (street == 5) {
+    return ->showdown();
+  }
+  auto newStreet = street == 0 ? 3 : street + 1;
+  return std::make_shared<RoundState>(1, newStreet, std::array<int, 2>{0, 0}, stacks, hands, deck, getShared());
+}
+
+StatePtr RoundState::proceed(Action action) const {
   auto active = getActive(button);
-
   switch (action.actionType) {
-  case Action::Type::ASSIGN: {
-    std::array<std::array<Card, 2>, 2> newHands;
-    newHands[active] = action.cards;
-    if (!isEmpty(hands[1-active])) {
-      newHands[1-active] = hands[1-active];
+    case Action::Type::FOLD: {
+      auto delta = active == 0 ? stacks[0] - STARTING_STACK : STARTING_STACK - stacks[1];
+      return std::make_shared<TerminalState>(std::array<int, 2>{delta, -1 * delta}, getShared());
     }
-    return std::make_shared<BoardState>(pot, pips, std::move(newHands), deck,
-                                        getShared());
-  }
-  case Action::Type::FOLD: {
-    auto newPot = pot + std::accumulate(pips.begin(), pips.end(), 0);
-    Deltas winnings = {active == 0 ? 0 : newPot, active == 0 ? newPot : 0};
-    return std::make_shared<TerminalState>(
-        std::move(winnings),
-        std::make_shared<BoardState>(newPot, std::array<Pip, 2>(), hands, deck,
-                                     getShared(), true));
-  }
-  case Action::Type::CALL: {
-    if (button == 0)
-      return std::make_shared<BoardState>(
-          pot, std::array<Pip, 2>{BIG_BLIND, BIG_BLIND}, hands, deck,
-          getShared());
-
-    auto newPips = pips;
-    auto contribution = newPips[1 - active] - newPips[active];
-    newPips[active] = newPips[active] + contribution;
-    return std::make_shared<BoardState>(pot, std::move(newPips), hands, deck,
-                                        getShared(), true);
-  }
-  case Action::Type::CHECK:
-    if ((street == 0 && button > 0) || button > 1)
-      return std::make_shared<BoardState>(pot, pips, hands, deck, getShared(),
-                                          true);
-    return std::make_shared<BoardState>(pot, pips, hands, deck, getShared(),
-                                        settled);
-  default: {
-    auto newPips = pips;
-    auto contribution = action.amount - newPips[active];
-    newPips[active] = newPips[active] + contribution;
-    return std::make_shared<BoardState>(pot, std::move(newPips), hands, deck,
-                                        getShared());
-  }
+    case Action::Type::CALL: {
+      if (button == 0) {  // sb calls bb
+        return std::make_shared<RoundState>(
+            1, 0, std::array<int, 2>{BIG_BLIND, BIG_BLIND},
+            std::array<int, 2>{STARTING_STACK - BIG_BLIND,
+                               STARTING_STACK - BIG_BLIND},
+            hands, deck, getShared());
+      }
+      // both players acted
+      auto newPips = pips;
+      auto newStacks = stacks;
+      auto contribution = newPips[1-active] - newPips[active];
+      newStacks[active] = newStacks[active] - contribution;
+      newPips[active] = newPips[active] + contribution;
+      auto state = std::make_shared<RoundState>(button + 1, street, std::move(newPips), std::move(newStacks),
+                                                hands, deck, getShared());
+      return state->proceedStreet();
+    }
+    case Action::Type::CHECK: {
+      if ((street == 0 && button > 0) || button > 1) {
+        return ->proceedStreet();
+      }
+      // let opponent act
+      return std::make_shared<RoundState>(button + 1, street, pips, stacks, hands, deck, getShared());
+    }
+    default: {  // Action::Type::RAISE
+      auto newPips = pips;
+      auto newStacks = stacks;
+      auto contribution = action.amount - newPips[active];
+      newStacks[active]  newStacks[active] - contribution;
+      newPips[active] = newPips[active] + contribution;
+      return std::make_shared<RoundState>(button + 1, street, std::move(newPips), std::move(newStacks), hands, deck, getShared());
+    }
   }
 }
 
 std::ostream &BoardState::doFormat(std::ostream &os) const {
-  std::array<std::string, 2> formattedHands = {
-      fmt::format(FMT_STRING("{}"),
-                  fmt::join(hands[0].begin(), hands[0].end(), "")),
-      fmt::format(FMT_STRING("{}"),
-                  fmt::join(hands[1].begin(), hands[1].end(), ""))};
-
   fmt::print(os,
              FMT_STRING("board(pot={}, pips=[{}], hands=[{}], deck=[{}], "
                         "settled={})"),
@@ -116,133 +103,7 @@ std::ostream &BoardState::doFormat(std::ostream &os) const {
   return os;
 }
 
-StatePtr RoundState::showdown() const {
-  std::array<StatePtr, NUM_BOARDS> terminalBoardStates;
-  for (auto i = 0; i < boardStates.size(); ++i) {
-    if (auto bs = std::dynamic_pointer_cast<const BoardState>(boardStates[i]))
-      terminalBoardStates[i] = bs->showdown();
-    else
-      terminalBoardStates[i] = boardStates[i];
-  }
-  return std::make_shared<TerminalState>(
-      Deltas{}, std::make_shared<RoundState>(button, street, stacks, hands,
-                                             std::move(terminalBoardStates),
-                                             getShared()));
-}
-
-std::array<std::unordered_set<Action::Type>, NUM_BOARDS>
-RoundState::legalActions() const {
-  std::array<std::unordered_set<Action::Type>, NUM_BOARDS> output;
-  for (auto i = 0; i < boardStates.size(); ++i) {
-    if (auto bs = std::dynamic_pointer_cast<const BoardState>(boardStates[i]))
-      output[i] = bs->legalActions(button, stacks);
-    else
-      output[i] = {Action::Type::CHECK};
-  }
-  return output;
-}
-
-RaiseBounds RoundState::raiseBounds() const {
-  auto active = getActive(button);
-
-  auto netContinueCost = 0;
-  auto netPipsUnsettled = 0;
-
-  for (auto &s : boardStates) {
-    if (auto bs = std::dynamic_pointer_cast<const BoardState>(s))
-      if (!bs->settled) {
-        netContinueCost += bs->pips[1 - active] - bs->pips[active];
-        netPipsUnsettled += bs->pips[active];
-      }
-  }
-
-  return {0, netPipsUnsettled + std::min(stacks[active],
-                                         stacks[1 - active] + netContinueCost)};
-}
-
-StatePtr RoundState::proceedStreet() const {
-  std::array<int, NUM_BOARDS> newPots = {0};
-  for (auto i = 0; i < NUM_BOARDS; ++i) {
-    if (auto bs = std::dynamic_pointer_cast<const BoardState>(boardStates[i])) {
-      newPots[i] =
-          bs->pot + std::accumulate(bs->pips.begin(), bs->pips.end(), 0);
-    }
-  }
-
-  std::array<StatePtr, NUM_BOARDS> newBoardStates;
-  for (auto i = 0; i < NUM_BOARDS; ++i) {
-    if (auto bs = std::dynamic_pointer_cast<const BoardState>(boardStates[i])) {
-      newBoardStates[i] =
-          std::make_shared<BoardState>(newPots[i], std::array<int, 2>(),
-                                       bs->hands, bs->deck, boardStates[i]);
-    } else {
-      newBoardStates[i] = boardStates[i];
-    }
-  }
-
-  bool allTerminal =
-      std::all_of(newBoardStates.begin(), newBoardStates.end(), [](auto &v) {
-        return bool(std::dynamic_pointer_cast<const TerminalState>(v));
-      });
-
-  if (street == 5 || allTerminal)
-    return std::make_shared<RoundState>(button, 5, stacks, hands,
-                                        std::move(newBoardStates), getShared())
-        ->showdown();
-
-  auto newStreet = street == 0 ? 3 : street + 1;
-  return std::make_shared<RoundState>(1, newStreet, stacks, hands,
-                                      std::move(newBoardStates), getShared());
-}
-
-StatePtr
-RoundState::proceed(const std::array<Action, NUM_BOARDS> &actions) const {
-  std::array<StatePtr, NUM_BOARDS> newBoardStates;
-  for (auto i = 0; i < NUM_BOARDS; ++i) {
-    if (auto bs = std::dynamic_pointer_cast<const BoardState>(boardStates[i])) {
-      newBoardStates[i] = bs->proceed(actions[i], button, street);
-    } else {
-      newBoardStates[i] = boardStates[i];
-    }
-  }
-
-  auto active = getActive(button);
-
-  auto newStacks = stacks;
-  auto contribution = 0;
-
-  for (auto i = 0; i < NUM_BOARDS; ++i)
-    if (auto bs =
-            std::dynamic_pointer_cast<const BoardState>(newBoardStates[i]))
-      if (auto s = std::dynamic_pointer_cast<const BoardState>(boardStates[i]))
-        contribution += bs->pips[active] - s->pips[active];
-
-  newStacks[active] = newStacks[active] - contribution;
-
-  std::array<bool, NUM_BOARDS> settled = {};
-  for (auto i = 0; i < NUM_BOARDS; ++i) {
-    if (auto bs = std::dynamic_pointer_cast<const BoardState>(newBoardStates[i]))
-      settled[i] = bs->settled;
-    else
-      settled[i] = true;
-  }
-
-  auto state = std::make_shared<RoundState>(
-      button + 1, street, std::move(newStacks), hands,
-      std::move(newBoardStates), getShared());
-
-  if (std::all_of(settled.begin(), settled.end(), [](auto v) { return v; })) {
-    return state->proceedStreet();
-  } else {
-    return state;
-  }
-}
-
 std::ostream &RoundState::doFormat(std::ostream &os) const {
-  std::array<std::string, NUM_BOARDS> formattedBoards;
-  for (auto i = 0; i < NUM_BOARDS; ++i)
-    formattedBoards[i] = fmt::format(FMT_STRING("{}"), *boardStates[i]);
-
   std::array<std::string, 2> formattedHands = {
       fmt::format(FMT_STRING("{}"),
                   fmt::join(hands[0].begin(), hands[0].end(), "")),
@@ -250,11 +111,12 @@ std::ostream &RoundState::doFormat(std::ostream &os) const {
                   fmt::join(hands[1].begin(), hands[1].end(), ""))};
 
   fmt::print(os,
-             FMT_STRING("round(button={}, street={}, stacks=[{}], hands=[{}], "
-                        "boardStates=[{}])"),
-             button, street, fmt::join(stacks.begin(), stacks.end(), ", "),
+             FMT_STRING("round(button={}, street={}, pips=[{}], stacks=[{}], hands=[{}], "
+                        "deck=[{}])"),
+             button, street, fmt::join(pips.begin(), pips.end(), ", "),
+             fmt::join(stacks.begin(), stacks.end(), ", "),
              fmt::join(formattedHands.begin(), formattedHands.end(), ","),
-             fmt::join(formattedBoards.begin(), formattedBoards.end(), ", "));
+             fmt::join(deck.begin(), deck.end(), ", "));
   return os;
 }
 

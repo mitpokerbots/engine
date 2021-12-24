@@ -11,9 +11,4 @@ inline constexpr int STARTING_STACK = 400;
 inline constexpr int BIG_BLIND = 2;
 inline constexpr int SMALL_BLIND = 1;
 
-using Card = std::string;
-using Pip = int;
-using RaiseBounds = std::array<int, 2>;
-using Deltas = std::array<int, 2>;
-
 } // namespace pokerbots::skeleton
