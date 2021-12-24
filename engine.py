@@ -262,6 +262,7 @@ class Player():
         '''
         legal_actions = round_state.legal_actions() if isinstance(round_state, RoundState) else {CheckAction}
         if self.socketfile is not None and self.game_clock > 0.:
+            clause = ''
             try:
                 player_message[0] = 'T{:.3f}'.format(self.game_clock)
                 message = ' '.join(player_message) + '\n'
@@ -296,7 +297,7 @@ class Player():
                 print(error_message)
                 self.game_clock = 0.
             except (IndexError, KeyError, ValueError):
-                game_log.append(self.name + ' response misformatted')
+                game_log.append(self.name + ' response misformatted: ' + str(clause))
         return CheckAction() if CheckAction in legal_actions else FoldAction()
 
 
