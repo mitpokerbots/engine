@@ -6,12 +6,11 @@ namespace pokerbots::skeleton {
 
 struct GameInfo {
   int bankroll;
-  int oppBankroll;
   double gameClock;
   int roundNum;
 
-  GameInfo(int bankroll, int oppBankroll, double gameClock, int roundNum)
-      : bankroll(bankroll), oppBankroll(oppBankroll), gameClock(gameClock),
+  GameInfo(int bankroll, double gameClock, int roundNum)
+      : bankroll(bankroll), gameClock(gameClock),
         roundNum(roundNum) {}
 };
 
