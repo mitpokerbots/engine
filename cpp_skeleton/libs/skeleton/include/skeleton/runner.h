@@ -57,7 +57,7 @@ public:
     bool roundFlag = true;
     while (true) {
       auto packet = receive();
-      for (const auto &clause : packets) {
+      for (const auto &clause : packet) {
         auto leftover = clause.substr(1);
         switch (clause[0]) {
           case 'T': {
@@ -75,8 +75,8 @@ public:
             std::array<std::array<std::string, 2>, 2> hands;
             hands[active][0] = cards[0];
             hands[active][1] = cards[1];
-            std::array<Card, 5> deck;
-            std::array<Pip, 2> pips = {SMALL_BLIND, BIG_BLIND};
+            std::array<std::string, 5> deck;
+            std::array<int, 2> pips = {SMALL_BLIND, BIG_BLIND};
             std::array<int, 2> stacks = {
                 STARTING_STACK - SMALL_BLIND,
                 STARTING_STACK - BIG_BLIND};
@@ -162,9 +162,9 @@ public:
         }
       }
       if (roundFlag) {
-        send({Action::Type::CHECK});
+        send(Action::Type::CHECK);
       } else {
-        auto action = pokerbot.getAction(gameInfo, std::static_pointer_cast<const RoundState>(roundState), active)
+        auto action = pokerbot.getAction(gameInfo, std::static_pointer_cast<const RoundState>(roundState), active);
         send(action);
       }
     }

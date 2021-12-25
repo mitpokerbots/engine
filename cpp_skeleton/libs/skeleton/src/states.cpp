@@ -44,7 +44,7 @@ std::array<int, 2> RoundState::raiseBounds() const {
 
 StatePtr RoundState::proceedStreet() const {
   if (street == 5) {
-    return ->showdown();
+    return this->showdown();
   }
   auto newStreet = street == 0 ? 3 : street + 1;
   return std::make_shared<RoundState>(1, newStreet, std::array<int, 2>{0, 0}, stacks, hands, deck, getShared());
@@ -77,7 +77,7 @@ StatePtr RoundState::proceed(Action action) const {
     }
     case Action::Type::CHECK: {
       if ((street == 0 && button > 0) || button > 1) {
-        return ->proceedStreet();
+        return this->proceedStreet();
       }
       // let opponent act
       return std::make_shared<RoundState>(button + 1, street, pips, stacks, hands, deck, getShared());
@@ -86,21 +86,11 @@ StatePtr RoundState::proceed(Action action) const {
       auto newPips = pips;
       auto newStacks = stacks;
       auto contribution = action.amount - newPips[active];
-      newStacks[active]  newStacks[active] - contribution;
+      newStacks[active] = newStacks[active] - contribution;
       newPips[active] = newPips[active] + contribution;
       return std::make_shared<RoundState>(button + 1, street, std::move(newPips), std::move(newStacks), hands, deck, getShared());
     }
   }
-}
-
-std::ostream &BoardState::doFormat(std::ostream &os) const {
-  fmt::print(os,
-             FMT_STRING("board(pot={}, pips=[{}], hands=[{}], deck=[{}], "
-                        "settled={})"),
-             pot, fmt::join(pips.begin(), pips.end(), ", "),
-             fmt::join(formattedHands.begin(), formattedHands.end(), ", "),
-             fmt::join(deck.begin(), deck.end(), ", "), settled);
-  return os;
 }
 
 std::ostream &RoundState::doFormat(std::ostream &os) const {
