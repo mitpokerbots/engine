@@ -10,12 +10,12 @@ struct Bot {
 
   void handleRoundOver(GameInfoPtr gameState, TerminalStatePtr terminalState, int active) {}
   
-  std::vector<Action> getActions(GameInfoPtr gameState, RoundStatePtr roundState, int active) {
+  Action getAction(GameInfoPtr gameState, RoundStatePtr roundState, int active) {
     auto legalActions = roundState->legalActions();
     if (legalActions.find(Action::Type::CHECK) != legalActions.end()) {
-      return Action::Type::CHECK;
+      return {Action::Type::CHECK};
     }
-    return Action::Type::CALL;
+    return {Action::Type::CALL};
   }
 };
 
