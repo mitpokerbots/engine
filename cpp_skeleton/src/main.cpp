@@ -8,7 +8,20 @@ using namespace pokerbots::skeleton;
 struct Bot {
   void handleNewRound(GameInfoPtr gameState, RoundStatePtr roundState, int active) {}
 
-  void handleRoundOver(GameInfoPtr gameState, TerminalStatePtr terminalState, int active) {}
+  /*
+    Called when a round ends. Called NUM_ROUNDS times.
+
+    @param gameState The GameState object.
+    @param terminalState The TerminalState object.
+    @param active Your player's index.
+  */
+  void handleRoundOver(GameInfoPtr gameState, TerminalStatePtr terminalState, int active) {
+    // int myDelta = terminalState->deltas[active];  // your bankroll change from this round
+    // auto previousState = std::static_pointer_cast<const RoundState>(terminalState->previousState);  // RoundState before payoffs
+    // int street = previousState->street;  // 0, 3, 4, or 5 representing when this round ended
+    // auto myCards = previousState->hands[active];  // your cards
+    // auto oppCards = previousState->hands[1-active];  // opponent's cards or "" if not revealed
+  }
   
   /*
     Where the magic happens - your code should implement this function.
