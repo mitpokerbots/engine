@@ -162,7 +162,7 @@ public:
         }
       }
       if (roundFlag) {
-        send(Action::Type::CHECK);
+        send(Action {Action::Type::CHECK});
       } else {
         auto action = pokerbot.getAction(gameInfo, std::static_pointer_cast<const RoundState>(roundState), active);
         send(action);
