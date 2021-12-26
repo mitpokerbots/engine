@@ -6,7 +6,20 @@
 using namespace pokerbots::skeleton;
 
 struct Bot {
-  void handleNewRound(GameInfoPtr gameState, RoundStatePtr roundState, int active) {}
+  /*
+    Called when a new round starts. Called NUM_ROUNDS times.
+
+    @param gameState The GameState object.
+    @param roundState The RoundState object.
+    @param active Your player's index.
+  */
+  void handleNewRound(GameInfoPtr gameState, RoundStatePtr roundState, int active) {
+    // int myBankroll = gameState->bankroll;  // the total number of chips you've gained or lost from the beginning of the game to the start of this round
+    // float gameClock = gameState->gameClock;  // the total number of seconds your bot has left to play this game
+    // int roundNum = gameState->roundNum;  // the round number from 1 to State.NUM_ROUNDS
+    // auto myCards = roundState->hands[active];  // your cards
+    // bool bigBlind = (active == 1);  // true if you are the big blind
+  }
 
   /*
     Called when a round ends. Called NUM_ROUNDS times.
