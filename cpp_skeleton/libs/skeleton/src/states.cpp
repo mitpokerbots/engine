@@ -2,9 +2,7 @@
 
 #include <algorithm>
 #include <numeric>
-
-#include <fmt/format.h>
-#include <fmt/ostream.h>
+#include <sstream>
 
 #include "skeleton/util.h"
 
@@ -93,27 +91,31 @@ StatePtr RoundState::proceed(Action action) const {
   }
 }
 
+template <typename Iterator>
+std::string join(const Iterator begin, const Iterator end, const std::string &separator) {
+  std::ostringstream oss;
+  for (Iterator it = begin; it != end; ++it) {
+    if (it != begin)
+      oss << separator;
+    oss << *it;
+  }
+  return oss.str();
+}
+
 std::ostream &RoundState::doFormat(std::ostream &os) const {
   std::array<std::string, 2> formattedHands = {
-      fmt::format(FMT_STRING("{}"),
-                  fmt::join(hands[0].begin(), hands[0].end(), "")),
-      fmt::format(FMT_STRING("{}"),
-                  fmt::join(hands[1].begin(), hands[1].end(), ""))};
+      join(hands[0].begin(), hands[0].end(), ""),
+      join(hands[1].begin(), hands[1].end(), "")};
 
-  fmt::print(os,
-             FMT_STRING("round(button={}, street={}, pips=[{}], stacks=[{}], hands=[{}], "
-                        "deck=[{}])"),
-             button, street, fmt::join(pips.begin(), pips.end(), ", "),
-             fmt::join(stacks.begin(), stacks.end(), ", "),
-             fmt::join(formattedHands.begin(), formattedHands.end(), ","),
-             fmt::join(deck.begin(), deck.end(), ", "));
-  return os;
+  return os << "round(button=" << button << ", street=" << street << ", "
+             << "pips=[" << join(pips.begin(), pips.end(), ", ") << "], "
+             << "stacks=[" << join(stacks.begin(), stacks.end(), ", ") << "], "
+             << "hands=[" << join(formattedHands.begin(), formattedHands.end(), ",") << "], "
+             << "deck=[" << join(deck.begin(), deck.end(), ", ") << "])";
 }
 
 std::ostream &TerminalState::doFormat(std::ostream &os) const {
-  fmt::print(os, FMT_STRING("terminal(deltas=[{}])"),
-             fmt::join(deltas.begin(), deltas.end(), ", "));
-  return os;
+  return os << "terminal(deltas=[" << join(deltas.begin(), deltas.end(), ", ") << "])";
 }
 
 } // namespace pokerbots::skeleton

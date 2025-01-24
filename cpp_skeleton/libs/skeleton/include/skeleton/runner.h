@@ -9,9 +9,6 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/asio/ip/tcp.hpp>
 
-#include <fmt/format.h>
-#include <fmt/ostream.h>
-
 #include "actions.h"
 #include "constants.h"
 #include "game.h"
@@ -25,9 +22,7 @@ private:
   boost::asio::ip::tcp::iostream &stream;
 
   template <typename Action> void send(Action const& action) {
-    std::string code;
-    code = fmt::format(FMT_STRING("{}"), action);
-    stream << fmt::format(FMT_STRING("{}"), code) << '\n';
+    stream << action << '\n';
   }
 
   std::vector<std::string> receive() {
@@ -179,7 +174,7 @@ void runBot(std::string &host, std::string &port, Args... args) {
   boost::asio::ip::tcp::no_delay option(true);
   stream.rdbuf()->set_option(option);
   if (!stream) {
-    fmt::print(std::cerr, FMT_STRING("Unable to connect to {}:{}"), host, port);
+    std::cerr << "Unable to connect to " << host << ":" << port << std::endl;
     return;
   }
 

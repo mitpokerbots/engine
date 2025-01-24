@@ -1,5 +1,5 @@
 '''
-6.176 MIT POKERBOTS GAME ENGINE
+6.9630 MIT POKERBOTS GAME ENGINE
 DO NOT REMOVE, RENAME, OR EDIT THIS FILE
 '''
 from collections import namedtuple
@@ -307,7 +307,7 @@ class Game():
     '''
 
     def __init__(self):
-        self.log = ['6.176 MIT Pokerbots - ' + PLAYER_1_NAME + ' vs ' + PLAYER_2_NAME]
+        self.log = ['6.9630 MIT Pokerbots - ' + PLAYER_1_NAME + ' vs ' + PLAYER_2_NAME]
         self.player_messages = [[], []]
 
     def log_round_state(self, players, round_state):

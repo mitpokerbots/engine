@@ -1,8 +1,5 @@
 #include "skeleton/actions.h"
 
-#include <fmt/format.h>
-#include <fmt/ostream.h>
-
 namespace pokerbots::skeleton {
 
 std::ostream &operator<<(std::ostream &os, const Action &a) {
@@ -14,8 +11,7 @@ std::ostream &operator<<(std::ostream &os, const Action &a) {
   case Action::Type::CHECK:
     return os << 'K';
   default:
-    fmt::print(os, FMT_STRING("R{}"), a.amount);
-    return os;
+    return os << 'R' << a.amount;
   }
 }
 
