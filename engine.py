@@ -404,6 +404,7 @@ class Game():
         ]
         for player in players:
             player.build()
+        for player in players:
             player.run()
         for round_num in range(1, NUM_ROUNDS + 1):
             self.log.append('')
