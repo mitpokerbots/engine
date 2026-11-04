@@ -12,9 +12,16 @@ import socket
 import eval7
 import sys
 import os
+import random
+import secrets
 
 sys.path.append(os.getcwd())
 from config import *
+
+# Duplicate matches: both games of a matchup use the same seed (set by the runner).
+DECK_SEED = os.environ.get('POKERBOTS_SEED') or secrets.token_hex(16)
+# Official matches ignore each team's commands.json and use this fixed command.
+FIXED_COMMANDS = {'build': [], 'run': ['python3', 'player.py']}
 
 FoldAction = namedtuple('FoldAction', [])
 CallAction = namedtuple('CallAction', [])
@@ -156,6 +163,9 @@ class Player():
         '''
         Loads the commands file and builds the pokerbot.
         '''
+        if os.environ.get('POKERBOTS_OFFICIAL'):
+            self.commands = FIXED_COMMANDS
+            return
         try:
             with open(self.path + '/commands.json', 'r') as json_file:
                 commands = json.load(json_file)
@@ -193,19 +203,24 @@ class Player():
             try:
                 server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 with server_socket:
-                    server_socket.bind(('', 0))
+                    server_socket.bind(('127.0.0.1', 0))
                     server_socket.settimeout(CONNECT_TIMEOUT)
                     server_socket.listen()
                     port = server_socket.getsockname()[1]
+                    # never pass the deck seed (or any other engine setting) to a bot
+                    bot_env = {k: v for k, v in os.environ.items() if not k.startswith('POKERBOTS_')}
                     proc = subprocess.Popen(self.commands['run'] + [str(port)],
                                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                            cwd=self.path)
+                                            cwd=self.path, env=bot_env)
                     self.bot_subprocess = proc
                     # function for bot listening
                     def enqueue_output(out, queue):
+                        kept = 0
                         try:
                             for line in out:
-                                queue.put(line)
+                                if kept < PLAYER_LOG_SIZE_LIMIT:  # keep draining, but stop storing
+                                    kept += len(line)
+                                    queue.put(line)
                         except ValueError:
                             pass
                     # start a separate bot listening thread which dies with the program
@@ -238,8 +253,7 @@ class Player():
                 print('Could not close socket connection with', self.name)
         if self.bot_subprocess is not None:
             try:
-                outs, _ = self.bot_subprocess.communicate(timeout=CONNECT_TIMEOUT)
-                self.bytes_queue.put(outs)
+                self.bot_subprocess.communicate(timeout=CONNECT_TIMEOUT)
             except subprocess.TimeoutExpired:
                 print('Timed out waiting for', self.name, 'to quit')
                 self.bot_subprocess.kill()
@@ -365,12 +379,12 @@ class Game():
         self.player_messages[0].append('D' + str(round_state.deltas[0]))
         self.player_messages[1].append('D' + str(round_state.deltas[1]))
 
-    def run_round(self, players):
+    def run_round(self, players, round_num):
         '''
         Runs one round of poker.
         '''
         deck = eval7.Deck()
-        deck.shuffle()
+        random.Random('{}:{}'.format(DECK_SEED, round_num)).shuffle(deck.cards)
         hands = [deck.deal(2), deck.deal(2)]
         pips = [SMALL_BLIND, BIG_BLIND]
         stacks = [STARTING_STACK - SMALL_BLIND, STARTING_STACK - BIG_BLIND]
@@ -409,7 +423,7 @@ class Game():
         for round_num in range(1, NUM_ROUNDS + 1):
             self.log.append('')
             self.log.append('Round #' + str(round_num) + STATUS(players))
-            self.run_round(players)
+            self.run_round(players, round_num)
             players = players[::-1]
         self.log.append('')
         self.log.append('Final' + STATUS(players))

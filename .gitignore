@@ -7,3 +7,4 @@ gamelog.txt
 .idea/
 .metadata/
 build/
+.venv/
