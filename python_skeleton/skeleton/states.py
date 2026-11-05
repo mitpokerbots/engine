@@ -7,7 +7,7 @@ from .actions import FoldAction, CallAction, CheckAction, RaiseAction
 GameState = namedtuple('GameState', ['bankroll', 'game_clock', 'round_num'])
 TerminalState = namedtuple('TerminalState', ['deltas', 'previous_state'])
 
-NUM_ROUNDS = 1000
+NUM_ROUNDS = 3000
 STARTING_STACK = 400
 BIG_BLIND = 2
 SMALL_BLIND = 1

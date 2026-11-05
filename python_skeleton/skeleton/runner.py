@@ -112,7 +112,7 @@ def parse_args():
     '''
     parser = argparse.ArgumentParser(prog='python3 player.py')
     parser.add_argument('--host', type=str, default='localhost', help='Host to connect to, defaults to localhost')
-    parser.add_argument('port', type=int, help='Port on host to connect to')
+    parser.add_argument('port', type=str, help='Port on host to connect to, or the path of a Unix socket')
     return parser.parse_args()
 
 def run_bot(pokerbot, args):
@@ -121,9 +121,13 @@ def run_bot(pokerbot, args):
     '''
     assert isinstance(pokerbot, Bot)
     try:
-        sock = socket.create_connection((args.host, args.port))
+        if args.port.isdigit():
+            sock = socket.create_connection((args.host, int(args.port)))
+        else:  # official games: a Unix socket, so the bot needs no network access
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            sock.connect(args.port)
     except OSError:
-        print('Could not connect to {}:{}'.format(args.host, args.port))
+        print('Could not connect to {}'.format(args.port))
         return
     socketfile = sock.makefile('rw')
     runner = Runner(pokerbot, socketfile)

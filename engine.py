@@ -1,6 +1,13 @@
 '''
-6.9630 MIT POKERBOTS GAME ENGINE
-DO NOT REMOVE, RENAME, OR EDIT THIS FILE
+DevNet.CSU Pokerbots game engine.
+
+Based on the MIT Pokerbots reference engine (github.com/mitpokerbots/engine),
+with changes for the DevNet.CSU tournament: duplicate (seeded) deals, a hidden
+deck seed, a fixed run command for official games, capped bot output, and an
+optional Unix-socket connection so bots can run in containers with no network.
+
+Teams: you don't need to edit this file. Run it with `python3 engine.py`
+after setting the player paths in config.py.
 '''
 from collections import namedtuple
 from threading import Thread
@@ -18,9 +25,7 @@ import secrets
 sys.path.append(os.getcwd())
 from config import *
 
-# Duplicate matches: both games of a matchup use the same seed (set by the runner).
-DECK_SEED = os.environ.get('POKERBOTS_SEED') or secrets.token_hex(16)
-# Official matches ignore each team's commands.json and use this fixed command.
+# Official games ignore each team's commands.json and use this fixed command.
 FIXED_COMMANDS = {'build': [], 'run': ['python3', 'player.py']}
 
 FoldAction = namedtuple('FoldAction', [])
@@ -147,38 +152,58 @@ class RoundState(namedtuple('_RoundState', ['button', 'street', 'pips', 'stacks'
 class Player():
     '''
     Handles subprocess and socket interactions with one player's pokerbot.
+
+    launcher: optional object with command(name, bot_path, connect_arg) -> (argv, cwd)
+              and cleanup(name). Used by check_bot.py and the tournament runner,
+              for example to start bots in containers. When it's None, the bot
+              runs directly on this machine using its run command.
+    socket_dir: if set, the bot connects over a Unix socket in this folder
+                instead of a TCP port.
     '''
 
-    def __init__(self, name, path):
+    def __init__(self, name, path, official=False, launcher=None, socket_dir=None, log_dir='.', quiet=False):
         self.name = name
+        self.quiet = quiet
+        self.time_used = 0.  # actual thinking time, even if the clock is later zeroed
         self.path = path
+        self.official = official
+        self.launcher = launcher
+        self.socket_dir = socket_dir
+        self.log_dir = log_dir
         self.game_clock = STARTING_GAME_CLOCK
         self.bankroll = 0
         self.commands = None
         self.bot_subprocess = None
         self.socketfile = None
         self.bytes_queue = Queue()
+        self.round_num = 0
+        self.events = {'connected': False, 'illegal': 0, 'misformatted': 0,
+                       'ran_out_of_time': None, 'disconnected': None}
+
+    def say(self, *args):
+        if not self.quiet:
+            print(*args)
 
     def build(self):
         '''
         Loads the commands file and builds the pokerbot.
         '''
-        if os.environ.get('POKERBOTS_OFFICIAL'):
+        if self.official:
             self.commands = FIXED_COMMANDS
             return
         try:
-            with open(self.path + '/commands.json', 'r') as json_file:
+            with open(os.path.join(self.path, 'commands.json'), 'r') as json_file:
                 commands = json.load(json_file)
             if ('build' in commands and 'run' in commands and
                     isinstance(commands['build'], list) and
                     isinstance(commands['run'], list)):
                 self.commands = commands
             else:
-                print(self.name, 'commands.json missing command')
+                self.say(self.name, 'commands.json missing command')
         except FileNotFoundError:
-            print(self.name, 'commands.json not found - check PLAYER_PATH')
+            self.say(self.name, 'commands.json not found - check PLAYER_PATH')
         except json.decoder.JSONDecodeError:
-            print(self.name, 'commands.json misformatted')
+            self.say(self.name, 'commands.json misformatted')
         if self.commands is not None and len(self.commands['build']) > 0:
             try:
                 proc = subprocess.run(self.commands['build'],
@@ -187,13 +212,33 @@ class Player():
                 self.bytes_queue.put(proc.stdout)
             except subprocess.TimeoutExpired as timeout_expired:
                 error_message = 'Timed out waiting for ' + self.name + ' to build'
-                print(error_message)
+                self.say(error_message)
                 self.bytes_queue.put(timeout_expired.stdout)
                 self.bytes_queue.put(error_message.encode())
             except (TypeError, ValueError):
-                print(self.name, 'build command misformatted')
+                self.say(self.name, 'build command misformatted')
             except OSError:
-                print(self.name, 'build failed - check "build" in commands.json')
+                self.say(self.name, 'build failed - check "build" in commands.json')
+
+    def _listen(self):
+        '''
+        Opens the socket the bot will connect to. Returns (server_socket, connect_arg),
+        where connect_arg is what the bot receives on its command line.
+        '''
+        if self.socket_dir:
+            bot_dir = os.path.join(self.socket_dir, self.name)
+            os.makedirs(bot_dir, exist_ok=True)
+            os.chmod(bot_dir, 0o755)
+            sock_path = os.path.join(bot_dir, 'engine.sock')
+            if os.path.exists(sock_path):
+                os.unlink(sock_path)
+            server_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            server_socket.bind(sock_path)
+            os.chmod(sock_path, 0o666)  # the bot may run as a different user
+            return server_socket, sock_path
+        server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server_socket.bind(('127.0.0.1', 0))
+        return server_socket, str(server_socket.getsockname()[1])
 
     def run(self):
         '''
@@ -201,17 +246,19 @@ class Player():
         '''
         if self.commands is not None and len(self.commands['run']) > 0:
             try:
-                server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                server_socket, connect_arg = self._listen()
                 with server_socket:
-                    server_socket.bind(('127.0.0.1', 0))
                     server_socket.settimeout(CONNECT_TIMEOUT)
                     server_socket.listen()
-                    port = server_socket.getsockname()[1]
+                    if self.launcher is not None:
+                        command, cwd = self.launcher.command(self.name, self.path, connect_arg)
+                    else:
+                        command = self.commands['run'] + [connect_arg]
+                        cwd = self.path
                     # never pass the deck seed (or any other engine setting) to a bot
                     bot_env = {k: v for k, v in os.environ.items() if not k.startswith('POKERBOTS_')}
-                    proc = subprocess.Popen(self.commands['run'] + [str(port)],
-                                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                            cwd=self.path, env=bot_env)
+                    proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                            stdin=subprocess.DEVNULL, cwd=cwd, env=bot_env)
                     self.bot_subprocess = proc
                     # function for bot listening
                     def enqueue_output(out, queue):
@@ -231,13 +278,14 @@ class Player():
                         client_socket.settimeout(CONNECT_TIMEOUT)
                         sock = client_socket.makefile('rw')
                         self.socketfile = sock
-                        print(self.name, 'connected successfully')
+                        self.events['connected'] = True
+                        self.say(self.name, 'connected successfully')
             except (TypeError, ValueError):
-                print(self.name, 'run command misformatted')
-            except OSError:
-                print(self.name, 'run failed - check "run" in commands.json')
+                self.say(self.name, 'run command misformatted')
             except socket.timeout:
-                print('Timed out waiting for', self.name, 'to connect')
+                self.say('Timed out waiting for', self.name, 'to connect')
+            except OSError:
+                self.say(self.name, 'run failed - check "run" in commands.json')
 
     def stop(self):
         '''
@@ -248,18 +296,19 @@ class Player():
                 self.socketfile.write('Q\n')
                 self.socketfile.close()
             except socket.timeout:
-                print('Timed out waiting for', self.name, 'to disconnect')
+                self.say('Timed out waiting for', self.name, 'to disconnect')
             except OSError:
-                print('Could not close socket connection with', self.name)
+                self.say('Could not close socket connection with', self.name)
         if self.bot_subprocess is not None:
             try:
                 self.bot_subprocess.communicate(timeout=CONNECT_TIMEOUT)
             except subprocess.TimeoutExpired:
-                print('Timed out waiting for', self.name, 'to quit')
+                self.say('Timed out waiting for', self.name, 'to quit')
                 self.bot_subprocess.kill()
-                outs, _ = self.bot_subprocess.communicate()
-                self.bytes_queue.put(outs)
-        with open(self.name + '.txt', 'wb') as log_file:
+                self.bot_subprocess.communicate()
+        if self.launcher is not None:
+            self.launcher.cleanup(self.name)
+        with open(os.path.join(self.log_dir, self.name + '.txt'), 'wb') as log_file:
             bytes_written = 0
             for output in self.bytes_queue.queue:
                 try:
@@ -284,8 +333,12 @@ class Player():
                 start_time = time.perf_counter()
                 self.socketfile.write(message)
                 self.socketfile.flush()
-                clause = self.socketfile.readline().strip()
+                clause = self.socketfile.readline()
                 end_time = time.perf_counter()
+                self.time_used += end_time - start_time
+                if clause == '':  # the bot closed the connection or crashed
+                    raise ConnectionError
+                clause = clause.strip()
                 if ENFORCE_GAME_CLOCK:
                     self.game_clock -= end_time - start_time
                 if self.game_clock <= 0.:
@@ -300,28 +353,48 @@ class Player():
                     else:
                         return action()
                 game_log.append(self.name + ' attempted illegal ' + action.__name__)
+                self.events['illegal'] += 1
             except socket.timeout:
                 error_message = self.name + ' ran out of time'
                 game_log.append(error_message)
-                print(error_message)
+                self.say(error_message)
                 self.game_clock = 0.
+                self.events['ran_out_of_time'] = self.round_num
             except OSError:
                 error_message = self.name + ' disconnected'
                 game_log.append(error_message)
-                print(error_message)
+                self.say(error_message)
                 self.game_clock = 0.
+                self.events['disconnected'] = self.round_num
             except (IndexError, KeyError, ValueError):
                 game_log.append(self.name + ' response misformatted: ' + str(clause))
+                self.events['misformatted'] += 1
         return CheckAction() if CheckAction in legal_actions else FoldAction()
 
 
 class Game():
     '''
     Manages logging and the high-level game procedure.
+
+    With no arguments, it plays the game described in config.py, like the
+    original MIT engine. The tournament runner and check_bot.py pass
+    arguments instead.
     '''
 
-    def __init__(self):
-        self.log = ['6.9630 MIT Pokerbots - ' + PLAYER_1_NAME + ' vs ' + PLAYER_2_NAME]
+    def __init__(self, player_1=None, player_2=None, num_rounds=None, seed=None,
+                 official=None, launcher=None, socket_dir=None, log_dir='.', quiet=False):
+        self.player_specs = [player_1 or (PLAYER_1_NAME, PLAYER_1_PATH),
+                             player_2 or (PLAYER_2_NAME, PLAYER_2_PATH)]
+        self.num_rounds = num_rounds or NUM_ROUNDS
+        # Duplicate matches: both games of a matchup use the same seed.
+        self.seed = seed or os.environ.get('POKERBOTS_SEED') or secrets.token_hex(16)
+        self.official = bool(os.environ.get('POKERBOTS_OFFICIAL')) if official is None else official
+        self.launcher = launcher
+        self.socket_dir = socket_dir
+        self.log_dir = log_dir
+        self.quiet = quiet
+        names = [spec[0] for spec in self.player_specs]
+        self.log = ['DevNet.CSU Pokerbots - ' + names[0] + ' vs ' + names[1]]
         self.player_messages = [[], []]
 
     def log_round_state(self, players, round_state):
@@ -384,7 +457,8 @@ class Game():
         Runs one round of poker.
         '''
         deck = eval7.Deck()
-        random.Random('{}:{}'.format(DECK_SEED, round_num)).shuffle(deck.cards)
+        # same seed + same hand number = same cards, so game 2 of a matchup replays game 1
+        random.Random('{}:{}'.format(self.seed, round_num)).shuffle(deck.cards)
         hands = [deck.deal(2), deck.deal(2)]
         pips = [SMALL_BLIND, BIG_BLIND]
         stacks = [STARTING_STACK - SMALL_BLIND, STARTING_STACK - BIG_BLIND]
@@ -404,23 +478,23 @@ class Game():
 
     def run(self):
         '''
-        Runs one game of poker.
+        Runs one game of poker and returns a summary of the result.
         '''
-        print('   __  _____________  ___       __           __        __    ')
-        print('  /  |/  /  _/_  __/ / _ \\___  / /_____ ____/ /  ___  / /____')
-        print(' / /|_/ // /  / /   / ___/ _ \\/  \'_/ -_) __/ _ \\/ _ \\/ __(_-<')
-        print('/_/  /_/___/ /_/   /_/   \\___/_/\\_\\\\__/_/ /_.__/\\___/\\__/___/')
-        print()
-        print('Starting the Pokerbots engine...')
-        players = [
-            Player(PLAYER_1_NAME, PLAYER_1_PATH),
-            Player(PLAYER_2_NAME, PLAYER_2_PATH)
-        ]
+        if not self.quiet:
+            print('DevNet.CSU Pokerbots engine (based on MIT Pokerbots)')
+            print('Starting the engine...')
+        os.makedirs(self.log_dir, exist_ok=True)
+        players = [Player(name, path, official=self.official, launcher=self.launcher,
+                          socket_dir=self.socket_dir, log_dir=self.log_dir, quiet=self.quiet)
+                   for name, path in self.player_specs]
+        first, second = players
         for player in players:
             player.build()
         for player in players:
             player.run()
-        for round_num in range(1, NUM_ROUNDS + 1):
+        for round_num in range(1, self.num_rounds + 1):
+            for player in players:
+                player.round_num = round_num
             self.log.append('')
             self.log.append('Round #' + str(round_num) + STATUS(players))
             self.run_round(players, round_num)
@@ -429,10 +503,21 @@ class Game():
         self.log.append('Final' + STATUS(players))
         for player in players:
             player.stop()
-        name = GAME_LOG_FILENAME + '.txt'
-        print('Writing', name)
+        name = os.path.join(self.log_dir, GAME_LOG_FILENAME + '.txt')
+        if not self.quiet:
+            print('Writing', name)
         with open(name, 'w') as log_file:
             log_file.write('\n'.join(self.log))
+        return {
+            'seed': self.seed,
+            'num_rounds': self.num_rounds,
+            'players': [{
+                'name': p.name,
+                'bankroll': p.bankroll,
+                'clock_used': round(min(p.time_used, STARTING_GAME_CLOCK), 3),
+                'events': p.events,
+            } for p in (first, second)],
+        }
 
 
 if __name__ == '__main__':
