@@ -8,3 +8,5 @@ gamelog.txt
 .metadata/
 build/
 .venv/
+results/
+*.sock
