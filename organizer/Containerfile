@@ -1,0 +1,10 @@
+# Image every bot runs in on the official machine.
+# Build from the repo root:
+#   podman build -t devnet-pokerbots -f organizer/Containerfile .
+# Add libraries approved in week 1 to the pip line, then rebuild.
+FROM docker.io/library/python:3.12-slim
+
+RUN pip install --no-cache-dir eval7==0.1.11 numpy==2.5.4
+
+USER 65534:65534
+WORKDIR /bot
